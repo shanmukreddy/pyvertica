@@ -1,1 +1,45 @@
 include README.rst
+010747
+
+from loanElig.loanEngineering.features.loanEligibility import spark_app
+from pyspark.sql import functions as F
+spark = spark_app()
+
+
+def table_identifier(col):
+    col = col.map(lambda x: x[1]).flatmap(lambda x: x.split(' '))
+    col_cnt = col.map(lambda x : (x,1)).reducebyKey(lambda a,b : a+b)
+    return col_cnt
+
+
+
+def replace_special_chars(col):
+    list1 =['select','where','group','by', 'order']
+    for i in list1:
+        col = col.map(lambda x: x.replace(x,i,""))
+    return col
+
+
+df = spark.read.option("multiline","true").json('sample.json')
+
+# df = df.select('state', F.regexp_replace(F.col("state"), "[_\"\'():;,.!?\\-]", " ").alias("table_list"))
+# Word_count = df.groupBy('table_list').count()
+# Word_count.orderBy(F.col('count').desc()).show(10)
+list1 =['select','where','group','by', 'order','*','in',"[",'(',']',')']
+df = df.withColumn('cnt',F.regexp_replace(F.split(F.col('state'), 'from'),",",""))\
+        .withColumn('cnt2',F.explode(F.split(F.col('cnt'), " ")))
+
+# replace_pat = lambda x: x.replace(i,"") for i in list1
+def repl(col):
+    for i in list1:
+        col = col.replace(i,"")
+    return col
+
+rep1 = F.udf(repl)
+
+df = df.withColumn('cnt2',rep1(F.col('cnt2')))\
+    .filter((F.col('cnt2').isNotNull()) | (F.col('cnt2') != ""))\
+    .groupBy('cnt2')\
+    .count()
+
+df.show()
